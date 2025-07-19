@@ -1,0 +1,6 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveScene/2289379569_1795197252_223132457.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveScene/921762691_1787910703_128222746.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveScene/921762691_3175614553_3226192784.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveScene/921762691_826632093_3967018584.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveScene/921762691_1839128356_2847068867.mp4'

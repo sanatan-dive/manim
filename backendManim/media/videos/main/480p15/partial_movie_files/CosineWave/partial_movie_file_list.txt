@@ -1,0 +1,5 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/CosineWave/2289379569_1944844962_223132457.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/CosineWave/921762691_3478176898_681045790.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/CosineWave/921762691_1867681935_3239103585.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/CosineWave/921762691_2408024828_1178315562.mp4'

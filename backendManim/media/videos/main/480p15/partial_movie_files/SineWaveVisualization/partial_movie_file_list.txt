@@ -1,0 +1,7 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveVisualization/2289379569_2737436406_223132457.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveVisualization/921762691_187516390_3547147823.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveVisualization/921762691_2408024828_1003704362.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveVisualization/921762691_3197093278_2254612227.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveVisualization/921762691_1409995732_1585078492.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/480p15/partial_movie_files/SineWaveVisualization/921762691_1839128356_3378158114.mp4'
