@@ -63,7 +63,7 @@ const Works: React.FC = () => {
       <div
         className="absolute inset-0 z-0"
         style={{
-          background: '#ffffff',
+          background: '#f9fafb',
           backgroundImage:
             'radial-gradient(circle at 2px 2px, rgba(0, 0, 0, 0.20) 2px, transparent 0)',
           backgroundSize: '40px 35px',
@@ -75,7 +75,7 @@ const Works: React.FC = () => {
       />
 
       {/* Main Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 ">
         {/* Header Section */}
         <motion.div
           className='flex items-center justify-between px-8'
@@ -86,7 +86,7 @@ const Works: React.FC = () => {
         >
              {/* @ts-ignore */}
           <motion.div variants={fadeIn(0.2)}>
-            <img src="3dcube.png" width={'26%'} height={'26%'} alt="3D cube illustration" className='m-8 mt-20' />
+            <img src="3dcube.png" width={'30%'} height={'30%'} alt="3D cube illustration" className='m-8 mt-20' />
           </motion.div>
            {/* @ts-ignore */}
           <motion.div variants={fadeIn(0.4)} className='ml-32 mt-20'>
@@ -112,7 +112,7 @@ const Works: React.FC = () => {
 
           {/* Buttons Section */}
            {/* @ts-ignore */}
-          <motion.div variants={fadeIn(0.8)} className='flex items-center gap-6 mr-32 '>
+          <motion.div variants={fadeIn(0.8)} className='flex items-center gap-6 mr-21 '>
             {/* Sign Up Button */}
             <div className='bg-white text-black border font-bold font-funnel px-6 py-3 text-xl rounded-full hover:bg-gray-50 transition-all duration-200 cursor-pointer flex gap-2 items-center italic'>
               <button>Sign Up</button>
@@ -136,7 +136,7 @@ const Works: React.FC = () => {
 
         {/* Workflow Steps Section */}
         <motion.div
-          className="flex flex-col md:flex-row justify-center gap-8 px-8 mt-16 z"
+          className="flex flex-col md:flex-row justify-center gap-8 px-8 mt-32 "
           variants={staggerContainer}
           initial="hidden"
           whileInView="visible"
