@@ -1,6 +1,9 @@
+import { SignedIn, SignedOut,  SignInButton, UserButton, useUser } from "@clerk/clerk-react"
+import { Link } from "react-router-dom"
 
 
 function Header() {
+  const {isSignedIn} = useUser();
   return (
     <div className=' fixed inset-0 z-10 '>
         <div className='flex justify-around items-center'>
@@ -9,13 +12,36 @@ function Header() {
         <h1 className='text-xl font-medium'>Madio</h1>
       </div>
 
+
       <div className='font-funnel flex items-center gap-4 m-4'>
-        <span className='text-sm hover:text-stone-500 duration-200 cursor-pointer'>Motive</span>
+
+        <Link to="/create" className='text-sm hover:text-stone-500 duration-200 cursor-pointer'>
+          Create
+          </Link>
+        <span className='text-sm hover:text-stone-500 duration-200 cursor-pointer'>
+          Motive
+        </span>
         <span className='text-sm hover:text-stone-500 duration-200 cursor-pointer'>Works</span>
-        <span className='text-sm hover:text-stone-500 duration-200 cursor-pointer'>Dashboard</span>
+        
+          
+          
       </div>
       <div>
-        <button className='bg-black text-white font-funnel m-4 px-4 py-2 text-md rounded-full hover:bg-black/80 duration-200 cursor-pointer  '>Sign In</button>
+        
+        <SignedOut>
+          <button className='bg-black text-white font-funnel m-4 px-4 py-2 text-md rounded-full hover:bg-black/80 duration-200 cursor-pointer'>
+          <SignInButton />
+          </button>
+        </SignedOut>
+        
+        <SignedIn>
+          <div className='m-4 flex items-center justify-center '>
+          <UserButton />
+          </div>
+          
+        </SignedIn>
+        
+        
       </div>
       </div>
     </div>

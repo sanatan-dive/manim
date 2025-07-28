@@ -1,55 +1,72 @@
 from manim import *
-import numpy as np
 
-class BouncingBallSineWave(Scene):
+config.pixel_height = 1080
+config.pixel_width = 1920
+config.frame_rate = 30
+
+class SineWaveAnimation(Scene):
     def construct(self):
-        # Define the sine wave
+        config.frame_width = 16
+        config.frame_height = 9
+
+        # Title
+        title = Text("Sine Wave Animation", font_size=48)
+        title.move_to(UP * 3.5)
+        self.play(Write(title))
+
+        # Axes
         axes = Axes(
-            x_range=[0, 2 * PI, PI / 2],
-            y_range=[-1.5, 1.5, 1],
-            axis_config={"include_numbers": True},
+            x_range=[0, 10, 1],
+            y_range=[-1.5, 1.5, 0.5],
+            x_length=10,
+            y_length=3,
+            axis_config={"color": BLUE_E},
         )
-        sine_wave = axes.plot(lambda x: np.sin(x), color=BLUE)
+        axes.move_to(DOWN * 0.5)
+        x_label = axes.get_x_axis_label("x", edge=RIGHT, direction=DR, buff=0.5)
+        y_label = axes.get_y_axis_label("y", edge=UP, direction=UR, buff=0.5)
+        labels = VGroup(x_label, y_label)
 
-        # Define the bouncing ball
-        ball = Circle(radius=0.2, color=RED, fill_opacity=1.0)
-        ball.move_to(axes.c2p(0, 1))  # Start at the peak
+        self.play(Create(axes), Write(labels))
 
-        # Initial position and velocity
-        x_pos = 0
-        y_pos = 1
-        velocity = -2  # Initial downward velocity
-        gravity = 2
+        # Sine Wave
+        sine_wave = axes.plot(lambda x: np.sin(x), color=GREEN_E, stroke_width=3)
+        self.play(Create(sine_wave))
 
-        # Updater function for the ball's position
-        def update_ball(mob, dt):
-            nonlocal x_pos, y_pos, velocity
+        # Moving Dot
+        dot = Dot(axes.c2p(0, np.sin(0)), color=RED_E)
+        self.play(Create(dot))
 
-            # Update velocity due to gravity
-            velocity += gravity * dt
+        # Value tracker for x-coordinate
+        x_tracker = ValueTracker(0)
 
-            # Update position
-            y_pos += velocity * dt
+        # Updater function for the dot
+        def update_dot(mob, dt):
+            x_value = x_tracker.get_value()
+            mob.move_to(axes.c2p(x_value, np.sin(x_value)))
 
-            # Bounce when reaching the sine wave
-            sine_y = np.sin(x_pos)
-            if y_pos <= sine_y:
-                y_pos = sine_y
-                velocity = -velocity * 0.8  # Reverse velocity with some energy loss
+        dot.add_updater(update_dot)
 
-            x_pos += 0.5 * dt  # Constant horizontal movement
+        # Animate the x_tracker to move the dot along the sine wave
+        self.play(x_tracker.animate.set_value(10), run_time=5, rate_func=linear)
+        self.wait(1)
 
-            # Ensure x_pos stays within the sine wave bounds
-            if x_pos > 2 * PI:
-                x_pos = 0
-                y_pos = 1
-                velocity = -2  # Reset
+        # Remove the updater
+        dot.remove_updater(update_dot)
+        self.play(FadeOut(dot))
 
-            mob.move_to(axes.c2p(x_pos, y_pos))
+        # Another sine wave with transformation
+        sine_wave2 = axes.plot(lambda x: 0.5 * np.sin(2 * x), color=YELLOW_E, stroke_width=3)
+        self.play(Transform(sine_wave, sine_wave2))
+        self.wait(1)
 
-        ball.add_updater(update_ball)
+        # Fade out everything
+        self.play(FadeOut(title, axes, sine_wave, labels))
+        self.wait(0.5)
 
-        # Add everything to the scene
-        self.add(axes, sine_wave, ball)
-        self.wait(5)  # Run the animation for 5 seconds
-        ball.remove_updater(update_ball)
+        # Footer
+        footer = Text("Created with Manim", font_size=24, color=GRAY_E)
+        footer.move_to(DOWN * 3.5)
+        self.play(Write(footer))
+        self.wait(1)
+        self.play(FadeOut(footer))
