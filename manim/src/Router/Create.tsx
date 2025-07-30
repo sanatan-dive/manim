@@ -1,7 +1,7 @@
 import { SignedIn, SignedOut, SignIn, UserButton, useUser } from "@clerk/clerk-react";
 import { PlaceholdersAndVanishInput } from "../components/ui/placeholders-and-vanish-input";
 import { useState } from "react";
-import { Menu, X, Home, Settings, User, FileText, ChevronLeft, ChevronRight, SidebarClose, SidebarIcon } from "lucide-react";
+import {  X,  ChevronRight, SidebarClose, SidebarIcon } from "lucide-react";
 
 function Create() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);

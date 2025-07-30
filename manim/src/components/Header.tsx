@@ -1,9 +1,9 @@
-import { SignedIn, SignedOut,  SignInButton, UserButton, useUser } from "@clerk/clerk-react"
+import { SignedIn, SignedOut,  SignInButton, UserButton,  } from "@clerk/clerk-react"
 import { Link } from "react-router-dom"
 
 
 function Header() {
-  const {isSignedIn} = useUser();
+  
   return (
     <div className=' fixed inset-0 z-10 '>
         <div className='flex justify-around items-center'>
