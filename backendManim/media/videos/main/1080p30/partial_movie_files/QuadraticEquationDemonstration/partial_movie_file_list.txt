@@ -1,0 +1,12 @@
+# This file is used internally by FFMPEG.
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1794047400_2554514579_223132457.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_1839128356_2455878542.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_2793038125_1780270666.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_2704686740_42638529.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_3681142012_2532307954.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_958023162_2112896242.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_2408024828_1276519903.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_1173611496_4069399338.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_3971772427_731044300.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_1285216940_572365276.mp4'
+file 'file:/home/sana/Documents/Project/manim_genai/backendManim/media/videos/main/1080p30/partial_movie_files/QuadraticEquationDemonstration/1373264772_2408024828_2763848701.mp4'

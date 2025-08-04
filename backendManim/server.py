@@ -19,13 +19,24 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Updated Supabase connection with error handling
+try:
+    SUPABASE_URL = os.environ.get("SUPABASE_URL")
+    SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+    if SUPABASE_URL and SUPABASE_KEY:
+        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("Supabase connected successfully")
+    else:
+        print("Supabase credentials not found, running without database")
+        supabase = None
+except Exception as e:
+    print(f"Supabase connection failed: {e}")
+    supabase = None
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "") 
 print(f"GEMINI_API_KEY: {GEMINI_API_KEY[:5]}...") # Print first 5 chars for verification
 
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
 
 # Define the project root (where server.py is located)
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -54,55 +65,51 @@ def get_manim_code_from_gemini(prompt_text: str) -> str:
     """
     log_debug("Preparing enhanced prompt for Gemini API...")
     
-    system_instruction = """You are an expert Manim Python code generator specializing in creating visually stunning, professional-quality animations.
+    system_instruction = """You are an expert Manim Python code generator specializing in creating visually stunning, professional-quality animations for 16:9 aspect ratio.
 
-CRITICAL REQUIREMENTS:
-1. ALL animations MUST be designed for 16:9 aspect ratio (1920x1080 or equivalent)
-2. Use `config.frame_width` and `config.frame_height` for responsive positioning
-3. Center important content and ensure nothing gets cut off at edges
+CRITICAL FRAME SPECIFICATIONS:
+- Frame dimensions: 1920x1080 pixels (16:9 aspect ratio)
+- Manim coordinate system: X-axis [-7.11 to 7.11], Y-axis [-4 to 4]
+- SAFE ZONE for content: X[-6 to 6], Y[-3.5 to 3.5]
+- NO config lines in your code - they are automatically added
 
-ENHANCED CODING STANDARDS:
-- Always start with `from manim import *`
-- Create a single class inheriting from `manim.Scene`
-- Implement a comprehensive `construct` method
-- Use descriptive class names (e.g., `QuantumPhysicsVisualization`, `DataScienceExplanation`)
+POSITIONING RULES (STRICTLY FOLLOW):
+- Titles: y=2.5 to y=3.0 (not higher!)
+- Main content: y=-1.0 to y=1.0
+- Footer/subscripts: y=-2.5 to y=-3.0
+- Use font_size between 24-48 for most text
+- Use font_size between 48-72 ONLY for main titles
 
-VISUAL EXCELLENCE:
-- Use professional color schemes (consider `BLUE_E`, `RED_E`, `GREEN_E`, `PURPLE_E`, `YELLOW_E`)
-- Implement smooth, elegant transitions
-- Add appropriate spacing and margins for 16:9 layout
-- Use `self.camera.frame.scale()` when needed for better framing
+MANDATORY CODING STRUCTURE:
+```python
+from manim import *
 
-POSITIONING FOR 16:9:
-- Horizontal positioning: Use values between -7 and +7 (safe zone: -6 to +6)
-- Vertical positioning: Use values between -4 and +4 (safe zone: -3.5 to +3.5)
-- For multi-element layouts, use `arrange()` or `arrange_in_grid()` with proper spacing
-- Position titles at y=3 to 3.5, main content at y=0, and footnotes at y=-3 to -3.5
+class YourSceneName(Scene):
+    def construct(self):
+        # Your animation code here
+        pass
+```
 
-ANIMATION BEST PRACTICES:
-- Use varied animation types: `Create`, `Write`, `FadeIn`, `FadeOut`, `Transform`, `ReplacementTransform`
-- Add appropriate `self.wait()` intervals (0.5-2 seconds typically)
-- For continuous animations, use proper updater functions with `(mob, dt)` parameters
-- Ensure animations have clear beginnings and endings
+TEXT SIZING GUIDELINES:
+- Title text: Text("Title", font_size=48).move_to(UP * 2.5)
+- Regular text: Text("Content", font_size=36).move_to(ORIGIN)
+- Math equations: MathTex("x^2", font_size=32)
+- Small labels: Text("Label", font_size=24)
 
-MATHEMATICAL CONTENT:
-- Use `MathTex` for equations with proper LaTeX syntax
-- Use `Text` for regular text with appropriate font sizes
-- Ensure mathematical symbols are clearly visible and properly sized
+ANIMATION QUALITY RULES:
+- Use smooth transitions: FadeIn, FadeOut, Create, Write
+- Add self.wait(1) between major animations
+- Use professional colors: BLUE, RED, GREEN, YELLOW, PURPLE
+- Keep animations between 5-15 seconds total
+- Ensure all elements fit within the safe zone
 
-ERROR PREVENTION:
-- Handle common Manim errors (missing imports, incorrect syntax, animation conflicts)
-- Use try-catch patterns for complex operations when appropriate
-- Test positioning with `Dot().move_to()` if uncertain about coordinates
+FORBIDDEN:
+- Do NOT add any config.* lines
+- Do NOT use font_size > 72
+- Do NOT position elements outside safe zone
+- Do NOT create text longer than 40 characters per line
 
-PERFORMANCE OPTIMIZATION:
-- Avoid infinite loops or indefinite animations
-- Use efficient animation grouping with `AnimationGroup` when beneficial
-- Minimize unnecessary object creation
-
-If fixing previous code, analyze the error carefully and provide a complete, corrected solution that addresses the specific issue while maintaining all quality standards.
-
-Generate ONLY the complete Python code without any explanatory text or markdown formatting."""
+Generate ONLY complete Python code without explanations or markdown."""
     
     chat_history = [
         {
@@ -123,46 +130,63 @@ Generate ONLY the complete Python code without any explanatory text or markdown 
     
     log_debug("Sending enhanced request to Gemini API...")
     
-    try:
-        response = requests.post(
-            f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-            headers={"Content-Type": "application/json"},
-            json=payload,
-            timeout=30
-        )
-        log_debug(f"Gemini API response status: {response.status_code}")
-        response.raise_for_status()
-        
-        result = response.json()
-        log_debug("Gemini API response received successfully.")
-        
-        if (result.get("candidates") and len(result["candidates"]) > 0 and
-            result["candidates"][0].get("content") and
-            result["candidates"][0]["content"].get("parts") and
-            len(result["candidates"][0]["content"]["parts"]) > 0):
+    # Retry logic for API calls
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=60  # Increased timeout to 60 seconds
+            )
+            log_debug(f"Gemini API response status: {response.status_code}")
+            response.raise_for_status()
             
-            manim_code = result["candidates"][0]["content"]["parts"][0]["text"]
+            result = response.json()
+            log_debug("Gemini API response received successfully.")
             
-            # Clean up the code
-            manim_code = clean_generated_code(manim_code)
-            
-            log_debug(f"Generated Manim code (first 200 chars): {manim_code[:200]}...")
-            return manim_code
-        else:
-            raise Exception("Gemini API response did not contain expected content.")
+            if (result.get("candidates") and len(result["candidates"]) > 0 and
+                result["candidates"][0].get("content") and
+                result["candidates"][0]["content"].get("parts") and
+                len(result["candidates"][0]["content"]["parts"]) > 0):
+                
+                manim_code = result["candidates"][0]["content"]["parts"][0]["text"]
+                
+                # Clean up the code
+                manim_code = clean_generated_code(manim_code)
+                
+                log_debug(f"Generated Manim code (first 200 chars): {manim_code[:200]}...")
+                return manim_code
+            else:
+                raise Exception("Gemini API response did not contain expected content.")
 
-    except requests.exceptions.RequestException as e:
-        log_debug(f"HTTP error while calling Gemini API: {e}")
-        raise Exception(f"Failed to connect to AI service: {e}")
-    except json.JSONDecodeError:
-        log_debug(f"JSON decoding error: {response.text}")
-        raise Exception("Invalid response from AI service.")
-    except Exception as e:
-        log_debug(f"Unexpected error during Gemini API call: {e}")
-        raise
+        except requests.exceptions.Timeout as e:
+            log_debug(f"Timeout on attempt {attempt + 1}/{max_retries}: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2)  # Wait 2 seconds before retry
+                continue
+            raise Exception(f"Failed to connect to AI service after {max_retries} attempts: Timeout")
+        except requests.exceptions.RequestException as e:
+            log_debug(f"HTTP error while calling Gemini API: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                continue
+            raise Exception(f"Failed to connect to AI service: {e}")
+        except json.JSONDecodeError:
+            log_debug(f"JSON decoding error: {response.text}")
+            raise Exception("Invalid response from AI service.")
+        except Exception as e:
+            log_debug(f"Unexpected error during Gemini API call: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                continue
+            raise
+
+    raise Exception("All retry attempts failed")
 
 def clean_generated_code(code: str) -> str:
-    """Clean and enhance the generated Manim code."""
+    """Clean and enhance the generated Manim code with proper 16:9 configuration."""
     # Remove markdown code blocks
     if code.startswith("```python"):
         code = code.replace("```python", "").strip()
@@ -171,23 +195,61 @@ def clean_generated_code(code: str) -> str:
     if code.endswith("```"):
         code = code[:-3].strip()
     
-    # Ensure proper imports
-    if "from manim import *" not in code:
-        code = "from manim import *\n\n" + code
+    # Remove any existing config lines
+    lines = code.split('\n')
+    cleaned_lines = []
     
-    # Add config for 16:9 if not present
-    config_line = "config.pixel_height = 1080\nconfig.pixel_width = 1920\nconfig.frame_rate = 30\n"
-    if "config.pixel" not in code:
-        # Insert after imports
-        lines = code.split('\n')
-        import_end = 0
-        for i, line in enumerate(lines):
-            if line.strip() and not (line.startswith('import') or line.startswith('from')):
-                import_end = i
-                break
-        
-        lines.insert(import_end, config_line)
-        code = '\n'.join(lines)
+    for line in lines:
+        if not line.strip().startswith('config.'):
+            cleaned_lines.append(line)
+    
+    # Ensure proper imports
+    if "from manim import *" not in '\n'.join(cleaned_lines):
+        cleaned_lines.insert(0, "from manim import *")
+        cleaned_lines.insert(1, "")
+    
+    # Find where imports end
+    import_end = 1
+    for i, line in enumerate(cleaned_lines[1:], 1):
+        if line.strip() and not (line.startswith('import') or line.startswith('from')):
+            import_end = i
+            break
+    
+    # Add comprehensive 16:9 configuration
+    config_block = [
+        "",
+        "# 16:9 Aspect Ratio Configuration", 
+        "config.pixel_height = 1080",
+        "config.pixel_width = 1920",
+        "config.frame_rate = 30",
+        "config.background_color = BLACK",
+        ""
+    ]
+    
+    # Insert config after imports
+    for i, config_line in enumerate(config_block):
+        cleaned_lines.insert(import_end + i, config_line)
+    
+    final_code = '\n'.join(cleaned_lines)
+    
+    # Validate and fix common positioning issues
+    final_code = fix_positioning_issues(final_code)
+    
+    return final_code
+
+def fix_positioning_issues(code: str) -> str:
+    """Fix common positioning issues that cause out-of-frame content."""
+    
+    # Fix overly large font sizes
+    code = re.sub(r'font_size=(\d+)', lambda m: f'font_size={min(int(m.group(1)), 48)}' if int(m.group(1)) > 48 else m.group(0), code)
+    
+    # Fix positioning that's too high/low
+    code = re.sub(r'UP \* (\d+\.?\d*)', lambda m: f'UP * {min(float(m.group(1)), 3.0)}', code)
+    code = re.sub(r'DOWN \* (\d+\.?\d*)', lambda m: f'DOWN * {min(float(m.group(1)), 3.0)}', code)
+    
+    # Fix positioning that's too far left/right
+    code = re.sub(r'LEFT \* (\d+\.?\d*)', lambda m: f'LEFT * {min(float(m.group(1)), 6.0)}', code)
+    code = re.sub(r'RIGHT \* (\d+\.?\d*)', lambda m: f'RIGHT * {min(float(m.group(1)), 6.0)}', code)
     
     return code
 
@@ -210,17 +272,19 @@ def extract_scene_class_name(code: str) -> str:
     return "CustomAnimation"
 
 def run_manim_with_retries(file_path: str, scene_name: str, retries: int = MAX_MANIM_EXECUTION_RETRIES) -> tuple:
-    """Run Manim command with retry logic."""
+    """Run Manim command with retry logic and proper 16:9 settings."""
     manim_command = [
         "manim",
-        "-pqh",  # High quality for better 16:9 output
+        "-pqh",  # High quality
         "--resolution", "1920,1080",  # Explicit 16:9 resolution
+        "--format", "mp4",
         file_path,
         scene_name
     ]
     
     for attempt in range(retries):
         log_debug(f"Manim execution attempt {attempt + 1}/{retries}")
+        log_debug(f"Command: {' '.join(manim_command)}")
         
         try:
             process = subprocess.run(
@@ -237,6 +301,7 @@ def run_manim_with_retries(file_path: str, scene_name: str, retries: int = MAX_M
             else:
                 log_debug(f"Manim failed with return code {process.returncode}")
                 log_debug(f"STDERR: {process.stderr}")
+                log_debug(f"STDOUT: {process.stdout}")
                 
                 if attempt < retries - 1:
                     time.sleep(RETRY_DELAY_SECONDS)
@@ -256,45 +321,65 @@ def generate_manim_animation():
         data = request.get_json()
         prompt = data.get('prompt')
         user_id = data.get('user_id')
-        chat_id = data.get('chat_id')  # New: chat/session identifier
+        chat_id = data.get('chat_id')
 
         if not prompt or not user_id or not chat_id:
             return jsonify({"message": "Prompt, user_id, and chat_id are required"}), 400
 
         # Fetch last code for this chat_id from Supabase
         previous_code = None
-        try:
-            response = supabase.table("chats").select("code").eq("chat_id", chat_id).order("timestamp", desc=True).limit(1).execute()
-            if response.data and len(response.data) > 0:
-                previous_code = response.data[0]["code"]
-        except Exception as fetch_error:
-            log_debug(f"Supabase fetch error: {fetch_error}")
+        if supabase:
+            try:
+                response = supabase.table("chats").select("code").eq("chat_id", chat_id).order("timestamp", desc=True).limit(1).execute()
+                if response.data and len(response.data) > 0:
+                    previous_code = response.data[0]["code"]
+                    log_debug(f"Found previous code for chat_id {chat_id}")
+                else:
+                    log_debug(f"No previous code found for chat_id {chat_id}, starting new chat")
+            except Exception as fetch_error:
+                log_debug(f"Supabase fetch error: {fetch_error}")
+        else:
+            log_debug("No Supabase connection, skipping history fetch")
 
         manim_execution_failed_stderr = None
         manim_code = None
-        MAX_AI_CODE_GENERATION_RETRIES = 3
-        file_name = "main.py"  # Always use the same file
+        file_name = "main.py"
         file_path_absolute = os.path.join(OUTPUT_DIR_ABSOLUTE, file_name)
         file_path_relative = os.path.join(OUTPUT_DIR_RELATIVE, file_name)
 
         for ai_attempt in range(MAX_AI_CODE_GENERATION_RETRIES):
             log_debug(f"AI code generation attempt {ai_attempt + 1}/{MAX_AI_CODE_GENERATION_RETRIES}")
-            # Compose prompt for Gemini
+            
+            # Enhanced prompt composition
             if manim_execution_failed_stderr:
                 gemini_prompt = (
-                    f"Fix this Manim code for 16:9 aspect ratio based on: {prompt}\n\n"
-                    f"Previous code:\n{previous_code}\n\n"
-                    f"Error encountered:\n{manim_execution_failed_stderr}\n\n"
-                    f"Please provide corrected code that works properly in 16:9 format."
+                    f"FIX POSITIONING ERROR - Create 16:9 Manim animation: {prompt}\n\n"
+                    f"Previous failing code:\n{manim_code if manim_code else previous_code}\n\n"
+                    f"Error:\n{manim_execution_failed_stderr}\n\n"
+                    f"REQUIREMENTS:\n"
+                    f"- Keep ALL text within safe zone: X[-6,6], Y[-3.5,3.5]\n"
+                    f"- Use font_size <= 48\n"
+                    f"- Position titles at y=2.5 maximum\n"
+                    f"- Fix the positioning error and ensure visibility"
                 )
             elif previous_code:
                 gemini_prompt = (
-                    f"Enhance this Manim code for 16:9 aspect ratio: {prompt}\n\n"
-                    f"Previous code to improve:\n{previous_code}\n\n"
-                    f"Make it more visually appealing and ensure 16:9 compatibility."
+                    f"ENHANCE 16:9 Manim animation: {prompt}\n\n"
+                    f"Previous code:\n{previous_code}\n\n"
+                    f"REQUIREMENTS:\n"
+                    f"- Improve visuals while keeping within frame bounds\n"
+                    f"- Safe zone: X[-6,6], Y[-3.5,3.5]\n"
+                    f"- Use appropriate font sizes (24-48)"
                 )
             else:
-                gemini_prompt = f"Create a professional 16:9 Manim animation for: {prompt}"
+                gemini_prompt = (
+                    f"CREATE 16:9 Manim animation: {prompt}\n\n"
+                    f"CRITICAL REQUIREMENTS:\n"
+                    f"- ALL content must fit in 16:9 frame\n"
+                    f"- Safe positioning: X[-6,6], Y[-3.5,3.5]\n"
+                    f"- Proper font sizes: 24-48 for most text\n"
+                    f"- Professional appearance with smooth animations"
+                )
 
             manim_code = get_manim_code_from_gemini(gemini_prompt)
             with open(file_path_absolute, "w", encoding='utf-8') as f:
@@ -316,7 +401,7 @@ def generate_manim_animation():
                 "code": manim_code
             }), 500
 
-        # Find the generated video (use fallback dirs as before)
+        # Find the generated video
         video_dir = os.path.join(OUTPUT_DIR_ABSOLUTE, "media/videos/main/1080p60")
         fallback_dirs = [
             os.path.join(OUTPUT_DIR_ABSOLUTE, "media/videos/main/1080p30"),
@@ -325,12 +410,14 @@ def generate_manim_animation():
         ]
         video_filename = None
         video_url = None
+        
         if os.path.exists(video_dir):
             video_files = [f for f in os.listdir(video_dir) if f.endswith(".mp4")]
             if video_files:
                 video_files.sort(key=lambda x: os.path.getmtime(os.path.join(video_dir, x)), reverse=True)
                 video_filename = video_files[0]
                 video_url = f"/media/main/1080p60/{video_filename}"
+        
         if not video_filename:
             for fallback_dir in fallback_dirs:
                 if os.path.exists(fallback_dir):
@@ -342,18 +429,22 @@ def generate_manim_animation():
                         video_url = f"/media/main/{quality}/{video_filename}"
                         break
 
-        # Save chat turn to Supabase (with chat_id)
-        try:
-            supabase.table("chats").insert({
-                "user_id": user_id,
-                "chat_id": chat_id,
-                "prompt": prompt,
-                "code": manim_code,
-                "video_url": video_url,
-                "timestamp": datetime.datetime.now().isoformat()
-            }).execute()
-        except Exception as db_error:
-            log_debug(f"Database insert failed: {db_error}")
+        # Save to Supabase
+        if supabase:
+            try:
+                supabase.table("chats").insert({
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "prompt": prompt,
+                    "code": manim_code,
+                    "video_url": video_url,
+                    "timestamp": datetime.datetime.now().isoformat()
+                }).execute()
+                log_debug("Chat turn saved to Supabase successfully")
+            except Exception as db_error:
+                log_debug(f"Database insert failed: {db_error}")
+        else:
+            log_debug("No Supabase connection, skipping database save")
 
         return jsonify({
             "video_url": video_url,
@@ -369,7 +460,6 @@ def generate_manim_animation():
 def serve_video(filename):
     """Serve video files with proper path handling."""
     try:
-        # Handle nested paths for different qualities
         media_root = os.path.join(OUTPUT_DIR_ABSOLUTE, "media/videos")
         full_path = os.path.join(media_root, filename)
         
