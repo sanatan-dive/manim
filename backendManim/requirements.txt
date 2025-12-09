@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+manim
+google-generativeai
+python-dotenv
+pydantic
+pydantic-settings
+celery[redis]  # NEW
+redis  # NEW
