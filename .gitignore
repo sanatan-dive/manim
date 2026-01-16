@@ -15,6 +15,7 @@ build/
 # Environment variables
 .env
 .env.local
+prisma/migrations/
 
 # macOS
 .DS_Store
@@ -71,3 +72,4 @@ temp/
 *.bak
 *.swp
 *~
+madio-backend-user_accessKeys.csv

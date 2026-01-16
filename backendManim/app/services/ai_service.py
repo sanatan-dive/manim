@@ -7,12 +7,11 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 # Configure Gemini
-genai.configure(api_key=settings.GEMINI_API_KEY)
-model = genai.GenerativeModel(settings.MODEL_NAME)
-
+# We'll configure inside the function to avoid fork safety issues with gRPC in Celery
 
 class CodeGenerationError(Exception):
     """Raised when code generation fails."""
+
     pass
 
 
@@ -62,6 +61,12 @@ def generate_code(prompt: str) -> str:
     
     try:
         logger.info(f"Generating code for prompt: {prompt[:100]}...")
+        
+        # Configure and create model instance inside the function
+        # This prevents gRPC issues with Celery's prefork model
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        model = genai.GenerativeModel(settings.MODEL_NAME)
+        
         response = model.generate_content(full_prompt)
         
         if not response.text:

@@ -1,99 +1,81 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 from pathlib import Path
-from typing import Optional
-
+import os
 
 class Settings(BaseSettings):
-    """Configuration settings for Manim animation generation with validation."""
+    """Application settings with validation."""
     
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=True,
-        extra="ignore"
-    )
-    
-    # Required API Configuration
+    # API Configuration
     GEMINI_API_KEY: str
+    SECRET_KEY: str | None = None
+    MODEL_NAME: str = "gemini-2.0-flash"
     
-    # AI Model Configuration
-    MODEL_NAME: str = "gemini-2.5-pro"
+    # AI Configuration
+    dangerous_patterns: list[str] = ["import os", "import sys", "subprocess", "eval(", "exec(", "open("]
+    system_instruction: str = """You are an expert Manim animator. 
+    Generate ONLY the Python code for a Manim scene. 
+    Do not include explanations or markdown. 
+    The class should be named 'GeneratedAnimation'.
+    Use Manim Community Edition syntax."""
     
-    # File Configuration
-    generated_dir: Path = Path("generated")
+    # Job Configuration
+    MAX_JOB_HISTORY: int = 100
+    
+    # Database Configuration
+    DATABASE_URL: str = "file:./dev.db"
+    
+    # Paths
+    GENERATED_DIR: Path = Path("generated")
+    MEDIA_DIR: Path = Path("media")
+    VIDEOS_DIR: Path = Path("media/videos")
     generated_animation_file: Path = Path("generated/animation.py")
-    output_video_file: str = "output_animation.mp4"
-    media_dir: Path = Path("media/videos/generated_animation")
     
-    # Manim Configuration
-    manim_quality: str = "-qm"
-    animation_class_name: str = "GeneratedAnimation"
-    manim_timeout: int = 300  # 5 minutes
+    # CORS
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
     
-    # Server Configuration
-    host: str = "0.0.0.0"
-    port: int = 8000
-    allowed_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
-    
-    # Job Storage (in-memory for Phase 2)
-    max_job_history: int = 100
-    
-        # Redis Configuration
+    # Redis Configuration
     REDIS_URL: str = "redis://localhost:6379/0"
-    
-    # Celery Configuration
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
     
-    # System Instruction
-    system_instruction: str = (
-        "You are a Manim expert. Write a complete Python script using Manim Community Edition. "
-        "Return ONLY the raw Python code. Do not use Markdown backticks. "
-        "The class name must be 'GeneratedAnimation'. "
-        "Do not use .to_center(), use .center() instead. "
-        "IMPORTANT: Do not use MathTex or Tex classes, as the system lacks LaTeX. "
-        "Use the Text class for all text labels. Do not use LaTeX syntax (like \\pi). "
-        "Do not import or use dangerous modules like os, subprocess, sys, or eval."
-    )
+    # AWS S3 Configuration
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_REGION: str = "us-east-1"
+    AWS_S3_BUCKET: str | None = None
+    AWS_CLOUDFRONT_DOMAIN: str | None = None
     
-    # Security: Dangerous patterns to check in generated code
-    dangerous_patterns: list[str] = [
-        "import os",
-        "import sys", 
-        "import subprocess",
-        "eval(",
-        "exec(",
-        "compile(",
-        "__import__",
-        "open(",
-        "file(",
-        "input(",
-        "raw_input(",
-        "execfile(",
-    ]
+    # Storage mode: 'local' or 's3'
+    STORAGE_MODE: str = "local"
+    
+    @property
+    def allowed_origins(self) -> list[str]:
+        """Parse allowed origins into a list."""
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
     
     def validate_api_key(self) -> bool:
-        """Validate that API key is set and not empty."""
-        return bool(self.GEMINI_API_KEY and self.GEMINI_API_KEY.strip())
+        """Validate that API key is set."""
+        return bool(self.GEMINI_API_KEY and self.GEMINI_API_KEY != "your-api-key-here")
     
-    def ensure_directories(self) -> None:
-        """Ensure required directories exist."""
-        self.generated_dir.mkdir(parents=True, exist_ok=True)
-        self.media_dir.mkdir(parents=True, exist_ok=True)
+    def validate_s3_config(self) -> bool:
+        """Validate S3 configuration."""
+        if self.STORAGE_MODE == "s3":
+            return all([
+                self.AWS_ACCESS_KEY_ID,
+                self.AWS_SECRET_ACCESS_KEY,
+                self.AWS_S3_BUCKET
+            ])
+        return True
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+        extra = "ignore"
 
 
-# Create global settings instance
 settings = Settings()
 
-# Validate configuration on startup
-if not settings.validate_api_key():
-    raise ValueError(
-        "GEMINI_API_KEY is not set or is empty. "
-        "Please set it in your .env file or environment variables."
-    )
-
-# Ensure required directories exist
-settings.ensure_directories()
-
-
-__all__ = ['settings', 'Settings']
+# Create necessary directories
+settings.GENERATED_DIR.mkdir(exist_ok=True)
+settings.MEDIA_DIR.mkdir(exist_ok=True)
+settings.VIDEOS_DIR.mkdir(parents=True, exist_ok=True)

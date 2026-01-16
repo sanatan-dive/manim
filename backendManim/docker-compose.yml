@@ -1,0 +1,66 @@
+services:
+  redis:
+    image: redis:alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - manim_net
+
+  api:
+    build: .
+    command: sh -c "prisma generate && prisma db push && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - STORAGE_MODE=${STORAGE_MODE}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./media:/app/media
+      - ./generated:/app/generated
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - manim_net
+
+  worker:
+    build: .
+    command: sh -c "prisma generate && celery -A app.celery_app worker --loglevel=info --concurrency=4 --pool=threads"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - STORAGE_MODE=${STORAGE_MODE}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./media:/app/media
+      - ./generated:/app/generated
+    networks:
+      - manim_net
+
+networks:
+  manim_net:

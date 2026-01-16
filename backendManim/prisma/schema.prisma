@@ -1,0 +1,50 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-py"
+  interface = "asyncio"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Job {
+  id            String   @id @default(uuid())
+  prompt        String
+  status        String   @default("pending")
+  videoUrl      String?  @map("video_url")  // Can store S3 URLs (long strings)
+  s3Key         String?  @map("s3_key")     // NEW: Store S3 key for deletion
+  errorMessage  String?  @map("error_message")
+  executionLog  String?  @map("execution_log")
+  generatedCode String?  @map("generated_code")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  userId        String?  @map("user_id")
+  user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId])
+  @@map("jobs")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  apiKey    String?  @unique @map("api_key") // For API authentication
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  jobs      Job[]
+  
+  @@map("users")
+}

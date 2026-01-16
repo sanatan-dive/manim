@@ -1,0 +1,18 @@
+# Generated files
+generated/
+media/
+__pycache__/
+*.pyc
+.env
+.venv
+.git
+.DS_Store
+*.db
+*.sqlite
+npm-debug.log
+.coverage
+htmlcov/
+dist/
+build/
+coverage.xml
+*.egg-info/

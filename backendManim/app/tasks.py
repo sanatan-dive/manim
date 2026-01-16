@@ -1,90 +1,131 @@
-"""Celery tasks for animation generation."""
 import logging
 from app.celery_app import celery_app
-from app.services.ai_service import (
-    generate_code, 
-    save_code, 
-    CodeGenerationError, 
-    SecurityViolationError
-)
-from app.services.render_service import (
-    execute_manim, 
-    get_video_url, 
-    RenderError
-)
+from app.services.ai_service import generate_code, save_code, CodeGenerationError, SecurityViolationError
+from app.services.render_service import execute_manim, get_video_url, RenderError
+from app.services.database_service import db_service
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, name="process_animation_job")
-def process_animation_job(self, prompt: str):
-    """
-    Celery task to process animation generation.
-    
-    Args:
-        self: Celery task instance
-        prompt: User's text prompt for animation
-        
-    Returns:
-        dict: Contains video_url and execution_log
-    """
-    task_id = self.request.id
-    logger.info(f"[Task {task_id}] Starting processing for prompt: {prompt[:50]}...")
-    
+def run_async(coro):
+    """Helper to run async functions in sync Celery tasks."""
     try:
-        # Update task state: Generating code
-        self.update_state(state='GENERATING_CODE', meta={'progress': 'Generating code with AI'})
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    if loop.is_closed():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+    return loop.run_until_complete(coro)
+
+
+async def process_job_async(task_id: str, prompt: str, self_task):
+    """Async handler for the animation job."""
+    try:
+        # Connect to DB locally for this task
+        await db_service.connect()
+        
+        # Update status: Generating code
+        self_task.update_state(state='GENERATING_CODE')
+        await db_service.update_job_status(task_id, 'generating_code')
         logger.info(f"[Task {task_id}] Generating code...")
         
-        # Generate code using AI
+        # Generate code
         code = generate_code(prompt)
         save_code(code)
         logger.info(f"[Task {task_id}] Code generated successfully")
         
-        # Update task state: Rendering
-        self.update_state(state='RENDERING', meta={'progress': 'Rendering animation with Manim'})
+        # Update status: Rendering
+        self_task.update_state(state='RENDERING')
+        await db_service.update_job_status(task_id, 'rendering')
         logger.info(f"[Task {task_id}] Rendering animation...")
         
-        # Execute Manim
+        # Execute Manim and upload to S3
         stdout, stderr = execute_manim()
         video_url = get_video_url()
+        execution_log = f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
         
-        logger.info(f"[Task {task_id}] Completed successfully!")
+        # Extract S3 key
+        s3_key = None
+        if video_url and video_url.startswith("https://"):
+             # Original URL is likely a Presigned URL with query params
+             # We need to extract the path part: /videos/yyyy/mm/dd/file.mp4
+             try:
+                 from urllib.parse import urlparse
+                 path = urlparse(video_url).path
+                 # Remove leading slash to get key: videos/yyyy/mm/dd/file.mp4
+                 s3_key = path.lstrip('/')
+             except:
+                 # Fallback
+                 s3_key = video_url.split("/videos/", 1)[-1] if "/videos/" in video_url else None
+                 if s3_key and not s3_key.startswith("videos/"):
+                     s3_key = f"videos/{s3_key}"
         
+        # Update result
+        await db_service.update_job_result(
+            job_id=task_id,
+            video_url=video_url,
+            execution_log=execution_log,
+            generated_code=code,
+            s3_key=s3_key
+        )
+        
+        logger.info(f"[Task {task_id}] Completed successfully! Video: {video_url}")
         return {
             'status': 'completed',
             'video_url': video_url,
-            'execution_log': f"STDOUT:\n{stdout}\n\nSTDERR:\n{stderr}"
+            'execution_log': execution_log
         }
+        
+    except Exception as e:
+        # Re-raise to be caught in main task
+        raise e
+    finally:
+        # Always disconnect
+        await db_service.disconnect()
+
+
+@celery_app.task(bind=True, name="process_animation_job")
+def process_animation_job(self, prompt: str):
+    """Celery task entry point."""
+    task_id = self.request.id
+    logger.info(f"[Task {task_id}] Starting processing for prompt: {prompt[:50]}...")
+    
+    try:
+        return run_async(process_job_async(task_id, prompt, self))
         
     except SecurityViolationError as e:
         logger.error(f"[Task {task_id}] Security violation: {str(e)}")
-        self.update_state(
-            state='FAILURE',
-            meta={'error': f'Security violation: {str(e)}'}
-        )
+        run_async(db_service.connect())
+        run_async(db_service.update_job_error(task_id, f"Security violation: {str(e)}"))
+        run_async(db_service.disconnect())
         raise
         
     except CodeGenerationError as e:
         logger.error(f"[Task {task_id}] Code generation failed: {str(e)}")
-        self.update_state(
-            state='FAILURE',
-            meta={'error': f'Code generation failed: {str(e)}'}
-        )
+        run_async(db_service.connect())
+        run_async(db_service.update_job_error(task_id, f"Code generation failed: {str(e)}"))
+        run_async(db_service.disconnect())
         raise
         
     except RenderError as e:
         logger.error(f"[Task {task_id}] Rendering failed: {str(e)}")
-        self.update_state(
-            state='FAILURE',
-            meta={'error': f'Rendering failed: {str(e)}'}
-        )
+        run_async(db_service.connect())
+        run_async(db_service.update_job_error(task_id, f"Rendering failed: {str(e)}"))
+        run_async(db_service.disconnect())
         raise
         
     except Exception as e:
         logger.error(f"[Task {task_id}] Unexpected error: {str(e)}")
-        self.update_state(
-            state='FAILURE',
-            meta={'error': f'Unexpected error: {str(e)}'}
-        )
+        # Try to log error to DB if possible
+        try:
+            run_async(db_service.connect())
+            run_async(db_service.update_job_error(task_id, f"Unexpected error: {str(e)}"))
+            run_async(db_service.disconnect())
+        except Exception as db_err:
+            logger.error(f"Failed to log error to DB: {str(db_err)}")
         raise

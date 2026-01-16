@@ -74,4 +74,4 @@ class JobStore:
 
 
 # Global job store instance
-job_store = JobStore(max_jobs=settings.max_job_history)
+job_store = JobStore(max_jobs=settings.MAX_JOB_HISTORY)

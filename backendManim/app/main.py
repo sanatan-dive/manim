@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import logging
@@ -7,6 +8,8 @@ from pathlib import Path
 from config import settings
 from app.models.job import Job, JobStatus
 from app.services.job_store import job_store
+from app.services.database_service import db_service
+from app.services.s3_service import s3_service
 from app.services.ai_service import (
     generate_code, 
     save_code, 
@@ -44,6 +47,16 @@ app.add_middleware(
 
 # Mount static files for video serving
 app.mount("/videos", StaticFiles(directory="media/videos"), name="videos")
+
+@app.on_event("startup")
+async def startup_event():
+    await db_service.connect()
+    logger.info("Application startup complete.")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await db_service.disconnect()
+    logger.info("Application shutdown complete.")
 
 
 class GenerateRequest(BaseModel):
@@ -101,6 +114,8 @@ async def generate_animation(request: GenerateRequest):
         
         # Queue the task with the prompt
         task = process_animation_job.delay(request.prompt)
+
+        await db_service.create_job(job_id=task.id, prompt=request.prompt)
         
         logger.info(f"[Task {task.id}] Created for prompt: {request.prompt[:50]}...")
         
@@ -118,42 +133,101 @@ async def generate_animation(request: GenerateRequest):
 @app.get("/status/{job_id}")
 async def get_job_status(job_id: str):
     """Check Celery task status."""
-    task = celery_app.AsyncResult(job_id)
-    
-    response = {
-        "job_id": job_id,
-        "status": task.state.lower()
+    job = await db_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+     
+    return {
+        "job_id": job['id'],
+        "status": job['status'],
+        "video_url": job.get('videoUrl'),
+        "error_message": job.get('errorMessage'),
+        "execution_log": job.get('executionLog'),
+        "created_at": job['createdAt'].isoformat(),
+        "updated_at": job['updatedAt'].isoformat()
     }
-    
-    if task.state == 'PENDING':
-        response['message'] = 'Task is waiting to be processed'
-    elif task.state == 'GENERATING_CODE':
-        response['message'] = 'Generating animation code with AI'
-    elif task.state == 'RENDERING':
-        response['message'] = 'Rendering animation with Manim'
-    elif task.state == 'SUCCESS':
-        result = task.result
-        response['status'] = 'completed'
-        response['video_url'] = result.get('video_url')
-        response['execution_log'] = result.get('execution_log')
-    elif task.state == 'FAILURE':
-        response['status'] = 'failed'
-        response['error_message'] = str(task.info)
-    else:
-        response['message'] = f'Task state: {task.state}'
-    
-    return response
+
+@app.get("/video/stream/{job_id}")
+async def stream_video(job_id: str):
+    """Proxy video stream from S3."""
+    job = await db_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job['status'] != 'completed':
+        raise HTTPException(status_code=400, detail="Job not completed")
+        
+    s3_key = job.get('s3Key')
+    if not s3_key:
+        # Fallback to local if no S3 key but videoUrl exists
+        video_url = job.get('videoUrl')
+        if video_url:
+             if not video_url.startswith('http'):
+                 # Local file
+                 from fastapi.responses import RedirectResponse
+                 return RedirectResponse(video_url)
+             
+             # If it's a full URL (legacy or s3 url in db), try to extract key
+             try:
+                 from urllib.parse import urlparse
+                 path = urlparse(video_url).path
+                 s3_key = path.lstrip('/')
+             except:
+                pass
+        
+        if not s3_key:
+             raise HTTPException(status_code=404, detail="Video key not found")
+        
+    try:
+        if not s3_service.enabled:
+             raise HTTPException(status_code=500, detail="S3 not enabled")
+
+        # Get object from S3
+        file_obj = s3_service.s3_client.get_object(
+            Bucket=settings.AWS_S3_BUCKET,
+            Key=s3_key
+        )
+        
+        return StreamingResponse(
+            file_obj['Body'],
+            media_type="video/mp4",
+            headers={
+                "Content-Disposition": f"inline; filename=animation_{job_id}.mp4"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error streaming video: {e}")
+        raise HTTPException(status_code=500, detail="Failed to stream video")
+
 
 @app.get("/jobs")
-async def list_jobs(limit: int = 20):
-    """List recent jobs from Celery."""
+async def list_jobs(limit: int = 20, offset: int = 0):
+    """List recent jobs."""
     if limit < 1 or limit > 100:
         raise HTTPException(status_code=400, detail="Limit must be between 1 and 100")
     
-    # For now, return empty list since we need to configure result backend properly
-    # In production, you'd query Celery's result backend
+    jobs = await db_service.list_jobs(limit=limit, offset=offset)
+    total = await db_service.count_jobs()
+    
     return {
-        "jobs": [],
-        "count": 0,
-        "message": "Job history requires result backend configuration"
+        "jobs": jobs,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
+
+@app.get("/stats")
+async def get_stats():
+    """Get system statistics."""
+    total_jobs = await db_service.count_jobs()
+    pending_jobs = await db_service.count_jobs(status='pending')
+    completed_jobs = await db_service.count_jobs(status='completed')
+    failed_jobs = await db_service.count_jobs(status='failed')
+    
+    return {
+        "total_jobs": total_jobs,
+        "pending": pending_jobs,
+        "completed": completed_jobs,
+        "failed": failed_jobs,
+        "success_rate": round((completed_jobs / total_jobs * 100) if total_jobs > 0 else 0, 2)
     }

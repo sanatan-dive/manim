@@ -1,215 +1,56 @@
-# Manim GenAI - Phase 2 Complete! 🚀
+# Manim GenAI Project
 
-An AI-powered animation generation system using Manim and Gemini AI, now with asynchronous processing, enhanced error handling, and security features.
+## Prerequisites
 
-## Quick Start Guide
+- Docker & Docker Compose
+- Node.js & npm
+- Python 3.11+ (for local dev)
 
-### Backend Setup (FastAPI)
+## How to Run
 
-1. **Navigate to backend directory:**
+### 1. Start the Backend (Docker)
 
-   ```bash
-   cd backendManim
-   ```
+This runs the API, Worker, Database (PostgreSQL), and Redis containers.
 
-2. **Activate virtual environment:**
-
-   ```bash
-   source .venv/bin/activate
-   ```
-
-3. **Install dependencies:**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure environment:**
-
-   - Ensure `.env` file exists with your `GEMINI_API_KEY`
-   - The key is already configured in the current .env file
-
-5. **Start the backend server:**
-
-   ```bash
-   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
-
-   Or use the convenience script:
-
-   ```bash
-   ./start.sh
-   ```
-
-   The API will be available at: http://localhost:8000
-
-### Frontend Setup (React + Vite)
-
-1. **Navigate to frontend directory:**
-
-   ```bash
-   cd manim
-   ```
-
-2. **Install dependencies (first time only):**
-
-   ```bash
-   npm install
-   ```
-
-3. **Start the development server:**
-
-   ```bash
-   npm run dev
-   ```
-
-   The app will be available at: http://localhost:5173
-
-### Using the Application
-
-1. **Access the app:**
-
-   - Open http://localhost:5173 in your browser
-   - Navigate to the "Create" page at http://localhost:5173/create
-
-2. **Generate an animation:**
-   - Enter a prompt describing the animation you want (e.g., "Create a circle that transforms into a square")
-   - Submit the form
-   - The system will start processing in the background
-   - Status updates will appear in the chat
-   - The video will appear when rendering is complete (30-60 seconds)
-
-## API Endpoints
-
-### Core Endpoints
-
-- `GET /` - Root endpoint with API information
-- `GET /health` - Health check endpoint
-
-### Generation Endpoints
-
-- `POST /generate` - Start animation generation job
-
-  - Request: `{"prompt": "your animation description"}`
-  - Response: `{"job_id": "uuid", "status": "pending", "message": "..."}`
-  - **Note:** Returns immediately, processing happens in background
-
-- `GET /status/{job_id}` - Check job status
-
-  - Response includes: status, code, video_url, error_message
-  - Status values: pending, generating_code, rendering, completed, failed
-
-- `GET /jobs?limit=20` - List recent jobs
-
-## Architecture (Phase 2)
-
-### Backend Structure
-
-```
-backendManim/
-├── app/
-│   ├── main.py              # FastAPI app with background tasks
-│   ├── models/
-│   │   └── job.py           # Job and JobStatus models
-│   ├── services/
-│   │   ├── ai_service.py    # Code generation + sanitization
-│   │   ├── render_service.py # Manim rendering
-│   │   └── job_store.py     # In-memory job tracking
-│   └── ...
-├── config.py                # Pydantic Settings with validation
-└── .env                     # Environment variables
+```bash
+cd backendManim
+docker-compose up --build
 ```
 
-### Key Features
+- **API URL:** `http://localhost:8000`
+- **Docs:** `http://localhost:8000/docs`
 
-**✅ Asynchronous Processing**
+### 2. Start the Frontend (Local Development)
 
-- Jobs processed in background using FastAPI BackgroundTasks
-- API responds immediately with job ID
-- Frontend polls status endpoint for updates
+This runs the React application with Hot Module Replacement.
 
-**✅ Enhanced Error Handling**
+```bash
+cd manim
+npm install  # (Only if you haven't installed dependencies)
+npm run dev
+```
 
-- Custom exception types for different failure modes
-- Detailed error messages returned to frontend
-- Manim stdout/stderr captured for debugging
+- **App URL:** `http://localhost:5173`
 
-**✅ Security**
+## Environment Setup
 
-- Code sanitization checks for dangerous patterns
-- Blocks imports: os, sys, subprocess, eval, exec, etc.
-- Pattern-based security scanning
+### Backend (`backendManim/.env`)
 
-**✅ Configuration Management**
+Ensure these keys are set:
 
-- Pydantic Settings with validation
-- Environment variables from .env
-- Automatic directory creation
-- API key validation on startup
+```ini
+GEMINI_API_KEY=your_key
+AWS_ACCESS_KEY_ID=your_aws_key  # Optional if using local storage
+AWS_SECRET_ACCESS_KEY=your_secret
+AWS_S3_BUCKET=your_bucket
+STORAGE_MODE=s3 # or local
+```
 
-**✅ Structured Logging**
+### Frontend (`manim/.env`)
 
-- Timestamps and log levels
-- Job-specific logging with IDs
-- Error stack traces for debugging
+Ensure these keys are set:
 
-## Development Status
-
-### ✅ Phase 1: Walking Skeleton (Complete)
-
-- Basic FastAPI backend
-- AI code generation using Gemini
-- Manim video rendering
-- Frontend integration
-- CORS and static file serving
-
-### ✅ Phase 2: Refinement & Configuration (Complete)
-
-- Pydantic Settings with validation
-- Background task processing
-- Job tracking system
-- Status polling endpoint
-- Enhanced error handling
-- Security sanitization
-- Service-oriented architecture
-
-### 🔜 Phase 3: Production Architecture (Next)
-
-- Task queue (Celery + Redis)
-- Database persistence (PostgreSQL)
-- Cloud storage (S3/MinIO)
-- Docker containerization
-- Production deployment
-
-## Troubleshooting
-
-**Backend won't start:**
-
-- Check `GEMINI_API_KEY` is set in `.env`
-- Ensure virtual environment is activated
-- Run `pip install -r requirements.txt`
-- Check logs for Pydantic validation errors
-
-**Frontend can't connect:**
-
-- Verify backend is running on port 8000
-- Check CORS settings in config.py
-- Check browser console for errors
-
-**Job stays in "pending" status:**
-
-- Check backend logs for background task errors
-- Ensure Manim is installed: `pip install manim`
-- Verify media directories exist
-
-**Security violation error:**
-
-- AI generated code with dangerous imports
-- Try rephrasing your prompt
-- Check backend logs for specific pattern detected
-
-**Video doesn't display:**
-
-- Check job status endpoint for error_message
-- Verify video exists: `media/videos/generated_animation/720p30/`
-- Ensure static file serving is working at http://localhost:8000/videos/
+```ini
+VITE_CLERK_PUBLISHABLE_KEY=your_clerk_key
+VITE_API_URL=http://localhost:8000
+```

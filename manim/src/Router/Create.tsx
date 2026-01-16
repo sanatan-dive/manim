@@ -1,14 +1,28 @@
 import { PlaceholdersAndVanishInput } from "../components/ui/placeholders-and-vanish-input";
-import { useState } from "react";
-import { X, ChevronRight, SidebarClose, SidebarIcon } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import {
+  X,
+  ChevronRight,
+  SidebarClose,
+  SidebarIcon,
+  CheckCircle2,
+  Circle,
+  Loader2,
+} from "lucide-react";
+import { useGenerationStore } from "../store/useGenerationStore";
 
 function Create() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<
-    { role: "user" | "assistant"; content: string; videoUrl?: string }[]
-  >([]);
+
+  const { messages, isLoading, status, generateAnimation } =
+    useGenerationStore();
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading, status]);
 
   const placeholders = [
     "Create a circle that transforms into a square",
@@ -18,80 +32,8 @@ function Create() {
     "Animate text that fades in and moves",
   ];
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log(e.target.value);
-  };
-
-  const pollJobStatus = async (jobId: string): Promise<void> => {
-    const maxAttempts = 60; // Poll for up to 5 minutes (60 * 5 seconds)
-    let attempts = 0;
-
-    const poll = async () => {
-      try {
-        const response = await fetch(`http://localhost:8000/status/${jobId}`);
-        const job = await response.json();
-
-        console.log(`[Poll] Job ${jobId} status: ${job.status}`);
-
-        if (job.status === "completed") {
-          // Success!
-          const videoUrl = `http://localhost:8000${job.video_url}`;
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              content: "Here is your animation!",
-              videoUrl,
-            },
-          ]);
-          setIsLoading(false);
-          return;
-        } else if (job.status === "failed") {
-          // Failed
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              content: `Generation failed: ${
-                job.error_message || "Unknown error"
-              }`,
-            },
-          ]);
-          setIsLoading(false);
-          return;
-        } else {
-          // Still processing (pending, generating_code, rendering)
-          attempts++;
-          if (attempts >= maxAttempts) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "assistant",
-                content: "Generation timed out. Please try again.",
-              },
-            ]);
-            setIsLoading(false);
-            return;
-          }
-
-          // Poll again after 5 seconds
-          setTimeout(poll, 5000);
-        }
-      } catch (error) {
-        console.error("Error polling job status:", error);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: "Error checking job status. Please try again.",
-          },
-        ]);
-        setIsLoading(false);
-      }
-    };
-
-    // Start polling
-    poll();
+  const handleChange = (_: React.ChangeEvent<HTMLInputElement>) => {
+    // console.log(e.target.value);
   };
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -99,59 +41,7 @@ function Create() {
     const prompt = (e.target as any).querySelector("input").value;
     if (!prompt) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: prompt }]);
-    setIsLoading(true);
-
-    try {
-      // Submit the job
-      const response = await fetch("http://localhost:8000/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: prompt,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.job_id) {
-        // Job created successfully, show status message
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: "Generating your animation... This may take a minute.",
-          },
-        ]);
-
-        // Start polling for status
-        pollJobStatus(data.job_id);
-      } else {
-        console.error("Failed to create job:", data);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: `Failed to start generation: ${
-              data.detail || data.message || "Unknown error"
-            }`,
-          },
-        ]);
-        setIsLoading(false);
-      }
-    } catch (error: any) {
-      console.error("Error calling backend:", error);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Error connecting to server. Please try again.",
-        },
-      ]);
-      setIsLoading(false);
-    }
+    await generateAnimation(prompt);
   };
 
   const toggleSidebar = () => {
@@ -180,6 +70,50 @@ function Create() {
       href: "#chat4",
     },
   ];
+
+  const getStatusDisplay = () => {
+    if (status === "idle" || status === "completed" || status === "failed")
+      return null;
+
+    const steps = [
+      { id: "generating_code", label: "Generating Code" },
+      { id: "rendering", label: "Rendering Animation" },
+    ];
+
+    // Map status to active step index
+    let activeIndex = -1;
+    if (status === "generating_code") activeIndex = 0;
+    if (status === "rendering") activeIndex = 1;
+    if (status === "pending") activeIndex = 0; // Show first step as loading
+
+    return (
+      <div className="flex items-center justify-center space-x-4 py-2 bg-gray-50 rounded-lg max-w-sm mx-auto mt-2">
+        {steps.map((step, idx) => (
+          <div key={step.id} className="flex items-center space-x-2">
+            {idx < activeIndex ? (
+              <CheckCircle2 className="w-5 h-5 text-green-500" />
+            ) : idx === activeIndex ? (
+              <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+            ) : (
+              <Circle className="w-5 h-5 text-gray-300" />
+            )}
+            <span
+              className={`text-sm ${
+                idx === activeIndex
+                  ? "font-bold text-blue-600"
+                  : "text-gray-500"
+              }`}
+            >
+              {step.label}
+            </span>
+            {idx < steps.length - 1 && (
+              <div className="w-8 h-px bg-gray-300 mx-2" />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -261,7 +195,7 @@ function Create() {
             {/* Chat Interface */}
             <div className="flex-1 flex flex-col relative bg-white">
               {/* Chat History */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 pb-32">
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 pb-32 scroll-smooth">
                 {messages.length === 0 && (
                   <div className="text-center  mt-20">
                     <h1 className="text-4xl font-semibold font-funnel text-gray-800 mb-4">
@@ -304,6 +238,9 @@ function Create() {
                       ) : msg.role === "assistant" ? (
                         <div className="bg-gray-100 text-gray-800 rounded-2xl rounded-bl-none p-4">
                           {msg.content}
+                          {idx === messages.length - 1 &&
+                            isLoading &&
+                            getStatusDisplay()}
                         </div>
                       ) : (
                         msg.content
@@ -311,25 +248,7 @@ function Create() {
                     </div>
                   </div>
                 ))}
-
-                {isLoading && (
-                  <div className="flex justify-start">
-                    <div className="bg-gray-100 p-4 rounded-2xl rounded-bl-none flex items-center space-x-2">
-                      <div
-                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                        style={{ animationDelay: "0ms" }}
-                      />
-                      <div
-                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                        style={{ animationDelay: "150ms" }}
-                      />
-                      <div
-                        className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                        style={{ animationDelay: "300ms" }}
-                      />
-                    </div>
-                  </div>
-                )}
+                <div ref={bottomRef} />
               </div>
 
               {/* Input Area */}
