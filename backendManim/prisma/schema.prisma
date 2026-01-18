@@ -17,18 +17,23 @@ datasource db {
 
 model Job {
   id            String   @id @default(uuid())
+  title         String?  // Optional title for the animation
   prompt        String
   status        String   @default("pending")
-  videoUrl      String?  @map("video_url")  // Can store S3 URLs (long strings)
-  s3Key         String?  @map("s3_key")     // NEW: Store S3 key for deletion
+  videoUrl      String?  @map("video_url")
+  s3Key         String?  @map("s3_key")
+  duration      Float?   // Duration in seconds
   errorMessage  String?  @map("error_message")
   executionLog  String?  @map("execution_log")
   generatedCode String?  @map("generated_code")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
-  
+
   userId        String?  @map("user_id")
   user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  conversationId String? @map("conversation_id")
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([createdAt])
@@ -37,14 +42,33 @@ model Job {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  apiKey    String?  @unique @map("api_key") // For API authentication
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  clerkId         String?  @unique @map("clerk_id")  // ID from Clerk
+  email           String   @unique
+  name            String?
+  apiKey          String?  @unique @map("api_key")
+  credits         Int      @default(10)              // Default free credits
+  generationCount Int      @default(0) @map("generation_count")
+  plan            String   @default("free")          // free, pro, etc.
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
   
-  jobs      Job[]
+  jobs            Job[]
+  conversations   Conversation[]
   
   @@map("users")
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  title     String
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs Job[]
+
+  @@index([userId])
+  @@map("conversations")
 }

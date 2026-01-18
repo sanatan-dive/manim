@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # Job Configuration
     MAX_JOB_HISTORY: int = 100
     
+    # Auth Configuration
+    CLERK_ISSUER: str | None = None # e.g. https://clerk.your-domain.com
+    CLERK_AUDIENCE: str | None = None
+    
     # Database Configuration
     DATABASE_URL: str = "file:./dev.db"
     

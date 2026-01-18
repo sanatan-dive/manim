@@ -9,3 +9,8 @@ celery[redis]
 redis
 prisma
 boto3==1.34.0
+pyjwt[crypto]
+httpx
+slowapi
+passlib[bcrypt]
+python-multipart

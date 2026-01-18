@@ -113,53 +113,50 @@
 
 **Backend:**
 
-- [ ] Implement user registration endpoint
-- [ ] Implement login endpoint (JWT tokens)
-- [ ] Add password hashing (bcrypt)
-- [ ] Create user profile endpoints
-- [ ] Add rate limiting middleware
-- [ ] Implement API key generation for users
-- [ ] Add usage tracking and quotas
+- [x] Implement user registration endpoint (via Clerk Sync)
+- [x] Implement login endpoint (JWT tokens via Clerk)
+- [x] Add password hashing (Managed by Clerk)
+- [x] Create user profile endpoints
+- [x] Add rate limiting middleware
+- [x] Implement API key generation for users
+- [x] Add usage tracking and quotas
 
 **Frontend:**
 
-- [ ] Create login/signup pages
-- [ ] Implement authentication flow (store JWT in httpOnly cookies)
-- [ ] Add protected routes (redirect to login if not authenticated)
-- [ ] Create user profile page
-- [ ] Show usage statistics (videos generated, quota remaining)
-- [ ] Add logout functionality
-- [ ] Implement "forgot password" flow
+- [x] Create login/signup pages (Clerk Components)
+- [x] Implement authentication flow (Clerk Provider + Token Interceptor)
+- [x] Add protected routes (redirect to login if not authenticated)
+- [x] Create user profile page
+- [x] Show usage statistics (videos generated, quota remaining)
+- [x] Add logout functionality (Clerk UserButton)
+- [x] Implement "forgot password" flow (Clerk Managed)
 
 ### 4.2. Video Library & History (Full Stack)
 
 **Backend:**
 
-- [ ] Create endpoint to list user's videos
-- [ ] Add video metadata (title, created_at, duration)
-- [ ] Implement video deletion endpoint
-- [ ] Add search/filter capabilities
-- [ ] Create video sharing links (public URLs)
+- [x] Create endpoint to list user's videos
+- [x] Add video metadata (title, created_at, duration)
+- [x] Implement video deletion endpoint
+- [x] Add search/filter capabilities
+- [x] Create video sharing links (public URLs)
 
 **Frontend:**
 
-- [ ] Create video library/gallery page
-- [ ] Add video cards with thumbnails
-- [ ] Implement delete functionality with confirmation
-- [ ] Add search and filter UI
-- [ ] Show video details (date created, prompt used)
-- [ ] Add video download button
+- [x] Create video library/gallery page
+- [x] Add video cards with thumbnails
+- [x] Implement delete functionality with confirmation
+- [x] Add search and filter UI
+- [x] Show video details (date created, prompt used)
+- [x] Add video download button
 
 ### 4.3. Enhanced User Experience (Frontend)
 
-- [ ] Add example prompts/templates
+- [x] Add example prompts/templates
 - [ ] Implement prompt history (recent prompts)
 - [ ] Add video player with controls
-- [ ] Create landing page with feature showcase
-- [ ] Add pricing/plans page (if monetizing)
-- [ ] Implement dark mode toggle
 - [ ] Add keyboard shortcuts
-- [ ] Create help/documentation page
+- [x] Create help/documentation page
 
 ### 4.4. Monitoring & Analytics (Full Stack)
 

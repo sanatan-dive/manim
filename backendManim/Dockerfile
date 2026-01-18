@@ -29,11 +29,17 @@ COPY . .
 RUN chmod -R 777 /usr/local/lib/python3.11/site-packages/prisma
 
 # Create directories and fix permissions
+# We need to ensure manimuser owns the cache AND the home directory
 RUN mkdir -p media/videos generated && \
-    chown -R manimuser:manimuser /app
+    mkdir -p /home/manimuser/.cache/prisma-python && \
+    chown -R manimuser:manimuser /app /home/manimuser
 
 # Switch to non-root user
 USER manimuser
+
+# Pre-install Prisma CLI binaries during build to avoid network issues at runtime
+# Run this AS THE USER so permissions are correct
+RUN prisma py fetch
 
 # Expose API port
 EXPOSE 8000
