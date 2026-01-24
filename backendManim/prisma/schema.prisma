@@ -47,7 +47,7 @@ model User {
   email           String   @unique
   name            String?
   apiKey          String?  @unique @map("api_key")
-  credits         Int      @default(10)              // Default free credits
+  credits         Int      @default(3)              // Default free credits
   generationCount Int      @default(0) @map("generation_count")
   plan            String   @default("free")          // free, pro, etc.
   createdAt       DateTime @default(now()) @map("created_at")

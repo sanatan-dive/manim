@@ -3,3 +3,9 @@
 @theme {
   --font-funnel: "Funnel Display", sans-serif;
 }
+@utility no-scrollbar {
+  @apply [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
+}
+body {
+  font-family: var(--font-funnel);
+}

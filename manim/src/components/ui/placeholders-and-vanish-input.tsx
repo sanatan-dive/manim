@@ -8,10 +8,14 @@ export function PlaceholdersAndVanishInput({
   placeholders,
   onChange,
   onSubmit,
+  value: propValue,
+  setValue: setPropValue,
 }: {
   placeholders: string[];
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
+  value?: string;
+  setValue?: (value: string) => void;
 }) {
   const [currentPlaceholder, setCurrentPlaceholder] = useState(0);
 
@@ -45,7 +49,24 @@ export function PlaceholdersAndVanishInput({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const newDataRef = useRef<any[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState("");
+
+  const [internalValue, setInternalValue] = useState("");
+
+  const isControlled = propValue !== undefined;
+  const value = isControlled ? propValue : internalValue;
+
+  const setValue = useCallback(
+    (newValue: string) => {
+      if (!isControlled) {
+        setInternalValue(newValue);
+      }
+      if (isControlled && setPropValue) {
+        setPropValue(newValue);
+      }
+    },
+    [isControlled, setPropValue],
+  );
+
   const [animating, setAnimating] = useState(false);
 
   const draw = useCallback(() => {
@@ -163,7 +184,7 @@ export function PlaceholdersAndVanishInput({
     if (value && inputRef.current) {
       const maxX = newDataRef.current.reduce(
         (prev, current) => (current.x > prev ? current.x : prev),
-        0
+        0,
       );
       animate(maxX);
     }
@@ -179,14 +200,14 @@ export function PlaceholdersAndVanishInput({
     <form
       className={cn(
         "w-full relative max-w-3xl mx-auto  bg-white h-12 rounded-full overflow-hidden shadow-[0px_2px_3px_-1px_rgba(0,0,0,0.1),_0px_1px_0px_0px_rgba(25,28,33,0.02),_0px_0px_0px_1px_rgba(25,28,33,0.08)] transition duration-200",
-        value && "bg-gray-50"
+        value && "bg-gray-50",
       )}
       onSubmit={handleSubmit}
     >
       <canvas
         className={cn(
           "absolute pointer-events-none text-base transform scale-50 top-[20%] left-2 sm:left-8 origin-top-left pr-20",
-          !animating ? "opacity-0" : "opacity-100"
+          !animating ? "opacity-0" : "opacity-100",
         )}
         ref={canvasRef}
       />
@@ -203,7 +224,7 @@ export function PlaceholdersAndVanishInput({
         type="text"
         className={cn(
           "w-full relative text-sm sm:text-base z-50 border-none text-black h-full rounded-full focus:outline-none focus:ring-0 pl-4 sm:pl-10 pr-20",
-          animating && "text-transparent"
+          animating && "text-transparent",
         )}
       />
 

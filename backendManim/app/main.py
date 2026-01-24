@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import logging
 from pathlib import Path
 from config import settings
@@ -38,7 +38,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Rate limiting
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=get_remote_address, storage_uri=settings.REDIS_URL)
 
 app = FastAPI(
     title="Manim Animation Generator", 
@@ -79,7 +79,7 @@ async def shutdown_event():
 
 class GenerateRequest(BaseModel):
     """Request model for animation generation."""
-    prompt: str
+    prompt: str = Field(..., min_length=10, max_length=1000, description="The animation description")
     conversation_id: Optional[str] = None
     
     class Config:
@@ -127,14 +127,50 @@ async def health_check():
 
 @app.post("/generate", response_model=GenerateResponse)
 @limiter.limit("5/minute")
-async def generate_animation(request: Request, body: GenerateRequest, current_user = Depends(get_current_active_user)):
+async def generate_animation(
+    request: Request, 
+    body: GenerateRequest, 
+    current_user = Depends(get_current_active_user),
+    x_gemini_api_key: Optional[str] = Header(None, alias="x-gemini-api-key")
+):
     """Queue animation generation task."""
     try:
+        # 1. Check concurrent jobs FIRST
+        active_jobs = await db_service.count_active_jobs(current_user.id)
+        if active_jobs >= settings.MAX_CONCURRENT_JOBS:
+            raise HTTPException(
+                status_code=429, 
+                detail=f"You have reached the maximum number of concurrent jobs ({settings.MAX_CONCURRENT_JOBS}). Please wait for one to finish."
+            )
+
+        # 2. Check Credits & API Key
+        user_api_key = None
+        
+        if current_user.credits > 0:
+            # User has credits
+            await db_service.deduct_credit(current_user.id)
+            logger.info(f"Deducted 1 credit from user {current_user.id}. Remaining: {current_user.credits - 1}")
+        else:
+            # No credits, must use API Key
+            if not x_gemini_api_key:
+                raise HTTPException(
+                    status_code=402, # Payment Required signal
+                    detail="Zero credits"
+                )
+            user_api_key = x_gemini_api_key
+            logger.info(f"User {current_user.id} using custom API Key.")
+            # We still want to track usage count? Yes.
+            await db_service.increment_usage(current_user.id)
+
         # Import the task here to avoid circular imports
         from app.tasks import process_animation_job
         
         # Queue the task with the prompt
-        task = process_animation_job.delay(body.prompt)
+        task = process_animation_job.apply_async(
+            args=[body.prompt, user_api_key],
+            time_limit=settings.JOB_TIMEOUT,
+            soft_time_limit=settings.JOB_SOFT_TIMEOUT
+        )
 
         await db_service.create_job(
             job_id=task.id, 
@@ -143,8 +179,8 @@ async def generate_animation(request: Request, body: GenerateRequest, current_us
             conversation_id=body.conversation_id
         )
         
-        # Record usage
-        await db_service.increment_usage(current_user.id)
+        # We handled credit deduction logic above? No I need to implement it correctly.
+        # Let's replace the whole function body in one go.
         
         logger.info(f"[Task {task.id}] Created for prompt: {body.prompt[:50]}... User: {current_user.id}")
         
@@ -155,6 +191,7 @@ async def generate_animation(request: Request, body: GenerateRequest, current_us
         )
         
     except HTTPException:
+        # Re-raise HTTP exceptions (from 402 or 429)
         raise
     except Exception as e:
         logger.error(f"Failed to queue task: {str(e)}")
@@ -162,16 +199,24 @@ async def generate_animation(request: Request, body: GenerateRequest, current_us
 
 
 @app.get("/status/{job_id}")
-async def get_job_status(job_id: str):
+async def get_job_status(job_id: str, request: Request):
     """Check Celery task status."""
     job = await db_service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-     
+
+    # Construct video URL to go through our proxy/redirect endpoint
+    # This ensures fresh signatures and valid range requests
+    video_url = job.get('videoUrl')
+    if video_url and job.get('status') == 'completed':
+        # Use the stream endpoint which handles redirects/refreshing
+        video_url = str(request.url_for('stream_video', job_id=job['id']))
+
     return {
         "job_id": job['id'],
         "status": job['status'],
-        "video_url": job.get('videoUrl'),
+        "code": job.get('generatedCode'),
+        "video_url": video_url,
         "error_message": job.get('errorMessage'),
         "execution_log": job.get('executionLog'),
         "created_at": job['createdAt'].isoformat(),
@@ -180,62 +225,54 @@ async def get_job_status(job_id: str):
 
 @app.get("/video/stream/{job_id}")
 async def stream_video(job_id: str):
-    """Proxy video stream from S3."""
+    """Redirect to video stream from S3 or serve local."""
     job = await db_service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
     if job['status'] != 'completed':
         raise HTTPException(status_code=400, detail="Job not completed")
-        
+    
+    # Check for S3 Key first
     s3_key = job.get('s3Key')
     
-    # If S3 is not enabled, ignore s3_key (force local fallback)
-    if not s3_service.enabled:
-        s3_key = None
+    # If S3 is enabled and we have a key
+    if s3_service.enabled and s3_key:
+        try:
+            # Generate a FRESH presigned URL (solves expiry) without ResponseContentType to let S3 default or set it
+            # Explicitly set Content-Type to video/mp4 to ensure browser treats it as video
+            url = s3_service.s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': settings.AWS_S3_BUCKET,
+                    'Key': s3_key,
+                    'ResponseContentType': 'video/mp4'
+                },
+                ExpiresIn=3600 # 1 hour validity for this specific view
+            )
+            from fastapi.responses import RedirectResponse
+            # Using 307 Temporary Redirect to preserve method and body if any, but mostly for semantics
+            return RedirectResponse(url=url)
+        except Exception as e:
+            logger.error(f"Failed to generate redirect URL: {e}")
+            raise HTTPException(status_code=500, detail="Failed to access video")
 
-    if not s3_key:
-        # Fallback to local if no S3 key but videoUrl exists
-        video_url = job.get('videoUrl')
-        if video_url:
-             if not video_url.startswith('http'):
-                 # Local file
-                 from fastapi.responses import RedirectResponse
-                 return RedirectResponse(video_url)
-             
-             # If it's a full URL (legacy or s3 url in db), try to extract key
-             try:
-                 from urllib.parse import urlparse
-                 path = urlparse(video_url).path
-                 s3_key = path.lstrip('/')
-             except:
-                pass
-        
-        if not s3_key:
-             raise HTTPException(status_code=404, detail="Video key not found")
-        
-    try:
-        if not s3_service.enabled:
-             raise HTTPException(status_code=500, detail="S3 not enabled")
+    # Fallback/Local logic
+    video_url = job.get('videoUrl')
+    if not video_url:
+        raise HTTPException(status_code=404, detail="Video URL not found")
 
-        logger.info(f"Streaming video from S3 using key: {s3_key} from bucket {settings.AWS_S3_BUCKET}")
+    # If it's a local path (starts with /videos/)
+    if video_url.startswith('/videos/'):
+         from fastapi.responses import RedirectResponse
+         return RedirectResponse(url=video_url)
 
-        # Get object from S3
-        file_obj = s3_service.s3_client.get_object(
-            Bucket=settings.AWS_S3_BUCKET,
-            Key=s3_key
-        )
-        
-        return StreamingResponse(
-            file_obj['Body'],
-            media_type="video/mp4",
-            headers={
-                "Content-Disposition": f"inline; filename=animation_{job_id}.mp4"
-            }
-        )
-    except Exception as e:
-        logger.error(f"Error streaming video: {e}")
-        raise HTTPException(status_code=500, detail="Failed to stream video")
+    # If it's already an HTTP URL (legacy S3 or external)
+    if video_url.startswith('http'):
+         from fastapi.responses import RedirectResponse
+         return RedirectResponse(url=video_url)
+    
+    raise HTTPException(status_code=404, detail="Video not accessible")
 
 
 

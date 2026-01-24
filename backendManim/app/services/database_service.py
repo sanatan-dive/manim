@@ -1,7 +1,8 @@
 from prisma import Prisma
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
+from app.services.s3_service import s3_service
 
 logger = logging.getLogger(__name__)
 
@@ -75,15 +76,28 @@ class DatabaseService:
         return None
 
     async def delete_conversation(self, conversation_id: str, user_id: Optional[str] = None) -> Optional[dict]:
-        """Delete a conversation."""
+        """Delete a conversation and associated S3 files."""
         where = {'id': conversation_id}
         if user_id:
             where['userId'] = user_id
             
-        # Check existence
-        conv = await self.db.conversation.find_first(where=where)
+        # Check existence and fetch jobs to clean up files
+        conv = await self.db.conversation.find_first(
+            where=where,
+            include={'jobs': True}
+        )
+        
         if not conv:
             return None
+        
+        # Cleanup S3 files for all jobs in this conversation
+        if conv.jobs:
+            for job in conv.jobs:
+                if job.s3Key:
+                    try:
+                        s3_service.delete_video(job.s3Key)
+                    except Exception as e:
+                        logger.error(f"Failed to delete S3 file for job {job.id}: {e}")
             
         await self.db.conversation.delete(where={'id': conversation_id})
         return conv.dict()
@@ -159,6 +173,17 @@ class DatabaseService:
             }
         )
         return job.dict()
+
+    async def count_active_jobs(self, user_id: str) -> int:
+        """Count jobs that are pending, code_generation, or rendering."""
+        active_statuses = ['pending', 'generating_code', 'rendering', 'fixing_code']
+        
+        return await self.db.job.count(
+            where={
+                'userId': user_id,
+                'status': {'in': active_statuses}
+            }
+        )
     
 
     async def list_jobs(self, limit: int = 20, offset: int = 0, user_id: Optional[str] = None, search: Optional[str] = None, status: Optional[str] = None) -> List[dict]:
@@ -185,7 +210,7 @@ class DatabaseService:
         return [job.dict() for job in jobs]
 
     async def delete_job(self, job_id: str, user_id: Optional[str] = None) -> Optional[dict]:
-        """Delete a job. If user_id is provided, ensures ownership."""
+        """Delete a job and its S3 file. If user_id is provided, ensures ownership."""
         where = {'id': job_id}
         if user_id:
             where['userId'] = user_id
@@ -194,6 +219,13 @@ class DatabaseService:
         job = await self.db.job.find_first(where=where)
         if not job:
             return None
+
+        # Delete from S3 if key exists
+        if job.s3Key:
+            try:
+                s3_service.delete_video(job.s3Key)
+            except Exception as e:
+                logger.error(f"Failed to delete S3 file for job {job_id}: {e}")
 
         # Delete
         await self.db.job.delete(where={'id': job_id})

@@ -2,24 +2,26 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.core.security import get_current_active_user
 from app.services.database_service import db_service
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 
 router = APIRouter()
 
 class JobResponse(BaseModel):
     id: str
-    title: Optional[str]
+    title: Optional[str] = None
     prompt: str
     status: str
-    videoUrl: Optional[str]
-    duration: Optional[float]
-    errorMessage: Optional[str]
+    videoUrl: Optional[str] = None
+    code: Optional[str] = Field(None, alias="generatedCode")
+    duration: Optional[float] = None
+    errorMessage: Optional[str] = None
     createdAt: datetime
     updatedAt: datetime
     
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 class PaginatedJobsResponse(BaseModel):
     jobs: List[JobResponse]

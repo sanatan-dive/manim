@@ -95,7 +95,8 @@ class S3StorageService:
                 'get_object',
                 Params={
                     'Bucket': self.bucket_name,
-                    'Key': s3_key
+                    'Key': s3_key,
+                    'ResponseContentType': 'video/mp4'
                 },
                 ExpiresIn=expiration
             )

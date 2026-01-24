@@ -4,14 +4,34 @@ import { toast } from "sonner";
 export type JobStatus =
   | "pending"
   | "generating_code"
+  | "fixing_code"
   | "rendering"
   | "completed"
-  | "failed";
+  | "failed"
+  | string; // Allow dynamic status strings like "rendering (retry 2/3)"
 
 export interface Message {
   role: "user" | "assistant";
   content: string;
   videoUrl?: string;
+  code?: string;
+}
+
+export interface Job {
+  id: string;
+  title?: string;
+  prompt: string;
+  status: JobStatus;
+  videoUrl?: string;
+  createdAt: string;
+  conversationId?: string;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  updatedAt: string;
+  jobs?: Job[];
 }
 
 interface GenerationState {
@@ -21,16 +41,38 @@ interface GenerationState {
   currentJobId: string | null;
   error: string | null;
 
+  // API Key State
+  apiKey: string | null;
+  showApiKeyDialog: boolean;
+  setApiKey: (key: string) => void;
+  setShowApiKeyDialog: (show: boolean) => void;
+
+  // Conversation State
+  conversations: Conversation[];
+  currentConversationId: string | null;
+  isConversationsLoading: boolean;
+
   // Actions
   addMessage: (message: Message) => void;
   setLoading: (isLoading: boolean) => void;
   setStatus: (status: JobStatus | "idle") => void;
   setError: (error: string | null) => void;
-  generateAnimation: (prompt: string) => Promise<void>;
+  generateAnimation: (prompt: string, token?: string | null) => Promise<void>;
+
+  // New Conversation Actions
+  fetchConversations: (token: string) => Promise<void>;
+  createConversation: (token: string, title?: string) => Promise<string>;
+  loadConversation: (
+    conversation: Conversation,
+    token: string,
+  ) => Promise<void>;
+  deleteConversation: (id: string, token: string) => Promise<void>;
+  startNewChat: () => void;
   reset: () => void;
 }
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_KEY_STORAGE_KEY = "manim_genai_api_key";
 
 export const useGenerationStore = create<GenerationState>((set, get) => ({
   messages: [],
@@ -38,6 +80,20 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   status: "idle",
   currentJobId: null,
   error: null,
+  conversations: [],
+  currentConversationId: null,
+  isConversationsLoading: false,
+
+  // Initialize from local storage
+  apiKey: localStorage.getItem(API_KEY_STORAGE_KEY),
+  showApiKeyDialog: false,
+
+  setApiKey: (key: string) => {
+    localStorage.setItem(API_KEY_STORAGE_KEY, key);
+    set({ apiKey: key });
+  },
+
+  setShowApiKeyDialog: (show: boolean) => set({ showApiKeyDialog: show }),
 
   addMessage: (message) =>
     set((state) => ({ messages: [...state.messages, message] })),
@@ -52,10 +108,169 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       status: "idle",
       currentJobId: null,
       error: null,
+      currentConversationId: null,
     }),
 
-  generateAnimation: async (prompt: string) => {
-    const { addMessage, setLoading, setStatus, setError } = get();
+  startNewChat: () => {
+    set({
+      messages: [],
+      isLoading: false,
+      status: "idle",
+      currentJobId: null,
+      error: null,
+      currentConversationId: null,
+    });
+  },
+
+  fetchConversations: async (token: string) => {
+    set({ isConversationsLoading: true });
+    try {
+      const response = await fetch(`${API_URL}/conversations/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        set({ conversations: data });
+      }
+    } catch (e) {
+      console.error("Failed to fetch conversations", e);
+    } finally {
+      set({ isConversationsLoading: false });
+    }
+  },
+
+  createConversation: async (token: string, title: string = "New Chat") => {
+    try {
+      const response = await fetch(`${API_URL}/conversations/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ title }),
+      });
+      if (!response.ok) throw new Error("Failed to create conversation");
+      const data = await response.json();
+      set((state) => ({
+        conversations: [data, ...state.conversations],
+        currentConversationId: data.id,
+      }));
+      return data.id;
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
+  },
+
+  deleteConversation: async (id: string, token: string) => {
+    try {
+      const response = await fetch(`${API_URL}/conversations/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) throw new Error("Failed to delete conversation");
+
+      // Update local state
+      set((state) => {
+        const newConversations = state.conversations.filter((c) => c.id !== id);
+        // If we deleted the current conversation, reset state or switch to another?
+        // Let's just reset if current is deleted.
+        if (state.currentConversationId === id) {
+          return {
+            conversations: newConversations,
+            currentConversationId: null,
+            messages: [],
+            status: "idle",
+            error: null,
+          };
+        }
+        return { conversations: newConversations };
+      });
+      toast.success("Conversation deleted");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to delete conversation");
+    }
+  },
+
+  loadConversation: async (conversation: Conversation, token: string) => {
+    // Set basic info first
+    set({
+      currentConversationId: conversation.id,
+      isLoading: true,
+      messages: [], // Clear previous messages while loading
+    });
+
+    try {
+      // Fetch full conversation details to get jobs
+      const response = await fetch(
+        `${API_URL}/conversations/${conversation.id}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (!response.ok) throw new Error("Failed to load conversation details");
+
+      const fullConv = await response.json();
+
+      // Convert jobs to messages
+      const messages: Message[] = [];
+      if (fullConv.jobs && fullConv.jobs.length > 0) {
+        fullConv.jobs.forEach((job: any) => {
+          messages.push({ role: "user", content: job.prompt });
+          if (job.status === "completed" && job.videoUrl) {
+            messages.push({
+              role: "assistant",
+              content: "Here is the animation:",
+              videoUrl: `${API_URL}/video/stream/${job.id}`,
+              // Provide both fields to handle different aliases depending on API version
+              code: job.code || job.generatedCode,
+            });
+          } else if (job.status === "failed") {
+            messages.push({
+              role: "assistant",
+              content: `Generation failed: ${job.errorMessage || "Unknown error"}`,
+            });
+          } else if (
+            job.status === "pending" ||
+            job.status === "generating_code" ||
+            job.status === "rendering"
+          ) {
+            // Pending job logic can be tricky if we want to resume polling.
+            // For now, just show status. Ideally we resume polling.
+            messages.push({
+              role: "assistant",
+              content: "Generation in progress...",
+            });
+          }
+        });
+      }
+
+      set({
+        messages,
+        isLoading: false,
+        // If last job is pending, we might want to set status/currentJobId to resume polling?
+        // Skipping that complexity for now unless requested.
+      });
+    } catch (e) {
+      console.error(e);
+      set({ isLoading: false, error: "Failed to load conversation" });
+    }
+  },
+
+  generateAnimation: async (prompt: string, token?: string | null) => {
+    const {
+      addMessage,
+      setLoading,
+      setStatus,
+      setError,
+      currentConversationId,
+      apiKey,
+    } = get();
 
     // Reset error on new attempt
     setError(null);
@@ -64,16 +279,67 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     addMessage({ role: "user", content: prompt });
 
     try {
+      let conversationId = currentConversationId;
+
+      // Create conversation if none exists
+      if (!conversationId && token) {
+        // Use first few words of prompt as title
+        const title = prompt.split(" ").slice(0, 5).join(" ") + "...";
+        try {
+          // Create it
+          const newConvResponse = await fetch(`${API_URL}/conversations/`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ title }),
+          });
+          if (newConvResponse.ok) {
+            const newConv = await newConvResponse.json();
+            conversationId = newConv.id;
+            set((state) => ({
+              conversations: [newConv, ...state.conversations],
+              currentConversationId: newConv.id,
+            }));
+          }
+        } catch (e) {
+          console.warn(
+            "Failed to create conversation, proceeding without it",
+            e,
+          );
+        }
+      }
+
       // 1. Submit Job
       let response;
       let retries = 3;
       while (retries > 0) {
         try {
+          const headers: HeadersInit = { "Content-Type": "application/json" };
+          if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+          }
+          if (apiKey) {
+            headers["x-gemini-api-key"] = apiKey;
+          }
+
           response = await fetch(`${API_URL}/generate`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt }),
+            headers,
+            body: JSON.stringify({
+              prompt,
+              conversation_id: conversationId,
+            }),
           });
+
+          if (response.status === 402) {
+            set({ showApiKeyDialog: true, isLoading: false });
+            throw new Error(
+              "Free credits exhausted. Please provide an API key.",
+            );
+          }
+
           if (response.ok) break;
           // If 500 error, maybe retry? If 400, don't.
           if (response.status >= 500) {
@@ -82,7 +348,8 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
             // Client error, don't retry
             break;
           }
-        } catch (e) {
+        } catch (e: any) {
+          if (e.message.includes("Free credits")) throw e;
           console.warn(`Attempt failed, retries left: ${retries - 1}`, e);
           if (retries === 1) throw e;
         }
@@ -91,7 +358,10 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       }
 
       if (!response || !response.ok) {
-        throw new Error("Failed to start generation");
+        if (response?.status !== 402) {
+          throw new Error("Failed to start generation");
+        }
+        return;
       }
 
       const data = await response.json();
@@ -112,9 +382,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       const pollInterval = setInterval(async () => {
         try {
           attempts++;
-          const statusRes = await fetch(
-            `${API_URL}/status/${jobId}`
-          );
+          const statusRes = await fetch(`${API_URL}/status/${jobId}`);
 
           if (!statusRes.ok) {
             // Transient error in polling, ignore or count?
@@ -132,7 +400,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
           if (currentStatus === "completed") {
             clearInterval(pollInterval);
             setLoading(false);
-            
+
             // Use the proxy endpoint to avoid S3 presigned URL issues
             const videoUrl = `${API_URL}/video/stream/${jobId}`;
 
@@ -141,6 +409,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
               role: "assistant",
               content: "Here represents your animation!",
               videoUrl,
+              code: jobData.code,
             });
             toast.success("Animation generated successfully!");
           } else if (currentStatus === "failed") {
@@ -173,11 +442,15 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         }
       }, 5000);
     } catch (err: any) {
+      if (err.message.includes("Free credits")) {
+        setLoading(false);
+        return;
+      }
       console.error("Generation error", err);
       setLoading(false);
       setStatus("failed");
       setError(err.message || "Failed to connect to server");
-      toast.error("Failed to start generation");
+      toast.error(err.message || "Failed to start generation");
       addMessage({
         role: "assistant",
         content:

@@ -3,7 +3,7 @@ import React from "react";
 
 const Mission: React.FC = () => {
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-white">
+    <div className="relative h-screen w-full overflow-hidden bg-white transition-colors duration-300">
       {/* Background Video with Blend Mode */}
       <video
         autoPlay
@@ -18,7 +18,7 @@ const Mission: React.FC = () => {
 
       {/* Main Centered Title */}
       <motion.div
-        className="z-10 flex items-center justify-center h-full"
+        className="z-10 flex items-center justify-center h-full relative"
         initial={{ opacity: 0, y: 20, filter: "blur(4px)" }}
         whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
         viewport={{ once: true, amount: 0.6 }}

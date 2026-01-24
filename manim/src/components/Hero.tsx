@@ -98,7 +98,7 @@ function Hero() {
   };
 
   return (
-    <div className='h-screen overflow-hidden relative'>
+    <div className='h-screen overflow-hidden bg-gray-50 relative'>
       {/* Silver PNG 1 - Top Left */}
       <motion.img
         src='silver1.png'

@@ -2,25 +2,32 @@ from pydantic_settings import BaseSettings
 from pathlib import Path
 import os
 
+def _load_system_instruction() -> str:
+    try:
+        return Path("prompt.md").read_text()
+    except Exception:
+        # Minimal fallback to avoid crashes if file is missing
+        return "You are an expert Manim animation developer. Generate Python code using Manim."
+
 class Settings(BaseSettings):
     """Application settings with validation."""
     
     # API Configuration
     GEMINI_API_KEY: str
     SECRET_KEY: str | None = None
-    MODEL_NAME: str = "gemini-2.0-flash"
+    MODEL_NAME: str = "gemini-2.5-pro"
     
     # AI Configuration
     dangerous_patterns: list[str] = ["import os", "import sys", "subprocess", "eval(", "exec(", "open("]
-    system_instruction: str = """You are an expert Manim animator. 
-    Generate ONLY the Python code for a Manim scene. 
-    Do not include explanations or markdown. 
-    The class should be named 'GeneratedAnimation'.
-    Use Manim Community Edition syntax."""
+    
+    system_instruction: str = _load_system_instruction()
     
     # Job Configuration
     MAX_JOB_HISTORY: int = 100
-    
+    JOB_TIMEOUT: int = 300  # 5 minutes hard limit
+    JOB_SOFT_TIMEOUT: int = 240  # 4 minutes soft limit
+    MAX_CONCURRENT_JOBS: int = 2  # Max jobs per user
+
     # Auth Configuration
     CLERK_ISSUER: str | None = None # e.g. https://clerk.your-domain.com
     CLERK_AUDIENCE: str | None = None
